@@ -6,16 +6,19 @@
 <title>🍎 Безопасная барахолка Apple-техники</title>
 <script>
 // Force-reload to bust Telegram WebView cache.
-// Stores current version in localStorage; if it changes, replace URL with cache-bust query.
+// IMPORTANT: write new version to localStorage BEFORE location.replace,
+// otherwise the next page load reads the old saved value and triggers
+// another replace → infinite reload loop → black screen.
+// Uses sessionStorage as a "have we reloaded this version before" flag,
+// cleared by the URL itself (?v=…), not by saved-version mismatch.
 (function(){
   try{
-    var v='v47';
-    var saved=localStorage.getItem('__ib_version');
-    if(saved && saved!==v){
+    var v='v47.2';
+    localStorage.setItem('__ib_version',v);
+    var curParams=new URLSearchParams(location.search).get('v');
+    if(!curParams||curParams!==v){
       var u=location.pathname+'?v='+v+'&t='+Date.now();
       location.replace(u);
-    }else{
-      localStorage.setItem('__ib_version',v);
     }
   }catch(e){}
 })();
