@@ -9,7 +9,7 @@
 // Stores current version in localStorage; if it changes, replace URL with cache-bust query.
 (function(){
   try{
-    var v='v46';
+    var v='v47';
     var saved=localStorage.getItem('__ib_version');
     if(saved && saved!==v){
       var u=location.pathname+'?v='+v+'&t='+Date.now();
@@ -107,7 +107,7 @@ a{color:inherit;text-decoration:none}
 </style>
 </head>
 <body>
-<div id="vmark" style="background:linear-gradient(90deg,#22C55E,#16A34A);padding:10px;text-align:center;font-size:13px;font-weight:700;color:#0B0B0F">v46 · 19:05 · новый origin, кеш Telegram чист: ⭐ Stars / 💳 Тинькофф / 💎 TON</div>
+<div id="vmark" style="background:linear-gradient(90deg,#22C55E,#16A34A);padding:10px;text-align:center;font-size:13px;font-weight:700;color:#0B0B0F">v47 · 20:36 · ошибки видны прямо в форме, детальные тосты</div>
 <script>
 setTimeout(()=>{const m=document.getElementById('vmark');if(m&&location.search.indexOf('keep')<0)m.style.display='none';},12000);
 </script>
@@ -166,7 +166,7 @@ const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const haptic=(k='light')=>{try{const tg=window.Telegram?.WebApp;if(tg?.HapticFeedback){tg.HapticFeedback.impactOccurred(k);return;}if(navigator.vibrate){const ms=k==='heavy'?30:k==='medium'?20:k==='success'?15:10;navigator.vibrate(ms);}}catch(_){}};
 const toast=(m)=>{const d=document.createElement('div');d.className='toast';d.textContent=m;document.body.appendChild(d);setTimeout(()=>d.remove(),2200);};
-const auth=()=>{const tg=window.Telegram?.WebApp;return tg?.initData?{Authorization:'tma '+tg.initData}:{};};
+const _tg=window.Telegram?.WebApp;window.tg=_tg;const auth=()=>{return _tg?.initData?{Authorization:'tma '+_tg.initData}:{};};
 const me=()=>{const tg=window.Telegram?.WebApp;return tg?.initDataUnsafe?.user||null;};
 const openLink=(u)=>{const tg=window.Telegram?.WebApp;if(tg?.openLink){tg.openLink(u);}else{window.open(u,'_blank');}};
 const closeModal=()=>{document.querySelectorAll('.mbg').forEach(m=>m.remove());};
@@ -429,6 +429,17 @@ function openSellForm(){
   <style>.chips{display:flex;flex-wrap:wrap;gap:6px}.chip{background:#18181b;color:#a1a1aa;border:1px solid #27272a;padding:8px 12px;border-radius:10px;font-size:13px;cursor:pointer;font-family:inherit;transition:all .15s}.chip.on{background:linear-gradient(135deg,#FF8A3D,#FF4D00);color:#0B0B0F !important;border-color:transparent;font-weight:600}</style>`;
   document.body.insertAdjacentHTML('beforeend',html);
   // глобальный обработчик подсказки
+  // Показываем статус внутри формы (серый блок)
+  window.showFormStatus=(modal,msg)=>{
+    let s=document.getElementById('sellFormStatus');
+    if(!s){s=document.createElement('div');s.id='sellFormStatus';s.style.cssText='background:#18181b;border:1px solid #27272a;border-radius:10px;padding:10px;margin:10px 0;font-size:12px;color:#a1a1aa;text-align:center';const btn=document.getElementById('sellSubmit');btn.parentNode.insertBefore(s,btn);}
+    s.textContent=msg;s.style.borderColor='#27272a';s.style.color='#a1a1aa';s.style.background='#18181b';
+  };
+  window.showFormError=(modal,msg)=>{
+    let s=document.getElementById('sellFormStatus');
+    if(!s){s=document.createElement('div');s.id='sellFormStatus';s.style.cssText='background:rgba(239,68,68,.15);border:1px solid #EF4444;border-radius:10px;padding:10px;margin:10px 0;font-size:12px;color:#FCA5A5;text-align:center';const btn=document.getElementById('sellSubmit');btn.parentNode.insertBefore(s,btn);}
+    s.textContent=msg;s.style.borderColor='#EF4444';s.style.color='#FCA5A5';s.style.background='rgba(239,68,68,.15)';
+  };
   window.updateSellHint=()=>{
     const t=document.querySelector('#tierChips [data-tier].on')?.dataset.tier;
     const h=document.getElementById('sellHint');
@@ -449,20 +460,30 @@ function openSellForm(){
     const city=document.getElementById('sellCity').value.trim()||'Москва';
     const desc=document.getElementById('sellDesc').value.trim();
     if(title.length<3){toast('❌ Название должно быть от 3 символов');return;}
-    btn.disabled=true;btn.textContent='⏳ Создаю объявление…';
+    // Доп. валидация: обязательно выбрать категорию
+    if(!cat){showFormError(modal,'❌ Выбери категорию (нажми на 🍎 iPhone, 🎧 AirPods или другую)');haptic('error');return;}
+    if(!title){showFormError(modal,'❌ Введи название (минимум 3 символа)');haptic('error');return;}
+    if(!price||price<0){showFormError(modal,'❌ Введи цену (целое число ≥ 0)');haptic('error');return;}
+
+    // Показываем статус внутри формы
+    showFormStatus(modal,'⏳ Отправляю объявление…');
+    btn.disabled=true;btn.textContent='⏳ Создаю…';
     let createdId=null;
     try{
       // ВАЖНО: создаём объявление С ТЕМ ТАРИФОМ, КОТОРЫЙ ВЫБРАН (не free)
-      const data=await apiPost('/listings',{title,description:desc,price,cat,type,contact:'@'+(tg?.initDataUnsafe?.user?.username||'user'),tier,city});
-      if(!(data.ok||data.id))throw new Error(data.error||'Не удалось');
+      console.log('[sell] POST /listings',{title,cat,type,tier,price,city,desc:desc.length});
+      const data=await apiPost('/listings',{title,description:desc,price,cat,type,contact:'@'+(window.tg?.initDataUnsafe?.user?.username||tg?.initDataUnsafe?.user?.username||'user'),tier,city});
+      console.log('[sell] response',data);
+      if(!(data.ok||data.id))throw new Error(data.error||data.detail||JSON.stringify(data)||'Не удалось');
       createdId=data.id;
       toast('✅ Объявление создано!');
       haptic('success');
     }catch(e){
+      console.error('[sell] error',e);
       btn.disabled=false;btn.textContent='Опубликовать';
-      toast('❌ Ошибка: '+e.message);
+      showFormError(modal,'❌ Не удалось создать: '+(e.message||'неизвестная ошибка'));
       haptic('error');
-      return;
+      return; // НЕ закрываем модалку
     }
     closeModal();
     await loadListings();
