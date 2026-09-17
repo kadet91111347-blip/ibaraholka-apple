@@ -13,7 +13,7 @@
 // cleared by the URL itself (?v=…), not by saved-version mismatch.
 (function(){
   try{
-    var v='v54';
+    var v='v55';
     localStorage.setItem('__ib_version',v);
     var curParams=new URLSearchParams(location.search).get('v');
     if(!curParams||curParams!==v){
@@ -526,11 +526,28 @@ function openSellForm(showWarning){
     }
     closeModal();
     await loadListings();
-    // Для платных тарифов — показываем модалку с инструкцией (БЕЗ внешних ссылок)
+    // Для платных тарифов — v55: сразу открываем Т-Банк через /payments/yukassa/create + window.location.href
     if(tier!=='free'){
-      const tg=window.Telegram?.WebApp;
       const stars=tier==='vip'?150:50;
       const amount=tier==='vip'?750:250;
+      try{
+        console.log('[pay] POST /payments/yukassa/create',{listing_id:createdId,tier,user_id:window.tg?.initDataUnsafe?.user?.id});
+        const yData=await fetch((window.API_BASE||'')+'/payments/yukassa/create',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'tma '+(window.tg?.initData||'')},body:JSON.stringify({listing_id:createdId,tier:tier,user_id:window.tg?.initDataUnsafe?.user?.id})}).then(r=>r.json()).catch(e=>({ok:false,error:String(e)}));
+        console.log('[pay] yukassa response',yData);
+        if(yData.ok&&(yData.confirmation_url||yData.tinkoff_url||yData.quickpay_url)){
+          const payUrl=yData.confirmation_url||yData.tinkoff_url||yData.quickpay_url;
+          console.log('[pay] open Т-Банк via window.location.href:',payUrl);
+          // window.location.href ПОЛНОСТЬЮ покинет WebView и откроет ссылку в системном браузере/приложении Т-Банка
+          window.location.href=payUrl;
+          return;
+        }
+        // Если ЮKassa не сработала — показываем модалку с реквизитами
+        console.warn('[pay] yukassa fail, fallback to modal',yData);
+      }catch(e){
+        console.error('[pay] yukassa error',e);
+      }
+      // Fallback: модалка с реквизитами Тинькофф + TON (если redirect не сработал)
+      const tg=window.Telegram?.WebApp;
       const botUrl='https://t.me/Ibaraholka_bot?start='+encodeURIComponent('pay_'+createdId+'_'+tier);
       // Реквизиты для оплаты
       const card='2200 7007 2222 5678';          // Тинькофф
@@ -547,24 +564,64 @@ function openSellForm(showWarning){
           <div style="display:flex;justify-content:space-between;padding:4px 0"><span>Длительность</span><b style="color:#fff">${tier==='vip'?'7 дней':'24 часа'}</b></div>
         </div>
 
-        <p style="font-size:13px;font-weight:700;margin:0 0 6px">⭐ Способ 1: Telegram Звёзды</p>
-        <p style="font-size:12px;color:#a1a1aa;margin:0 0 8px">Проще всего. Бот пришлёт инвойс в личку — нажми и оплати.</p>
-        <button class="btn-cta" style="width:100%;background:linear-gradient(135deg,#FFB800,#FF8C00);color:#0B0B0F;font-weight:700;padding:14px;border-radius:12px;border:0;font-size:14px;cursor:pointer" onclick="try{const t=window.Telegram?.WebApp;t?.openTelegramLink?t.openTelegramLink('${botUrl}'):t?.openLink('${botUrl}');}catch(e){}closeModal()">⭐ Оплатить ${stars} ★ в боте</button>
+        <div style="background:rgba(255,221,45,.1);border:1px solid #FFDD2D;border-radius:12px;padding:14px;margin-bottom:14px;text-align:center">
+          <div style="font-size:24px;margin-bottom:6px">💳</div>
+          <div style="font-size:13px;font-weight:700;color:#FFDD2D;margin-bottom:6px">Открываем Т-Банк…</div>
+          <div style="font-size:12px;color:#a1a1aa;line-height:1.5">Если Т-Банк не открылся автоматически,<br>нажми кнопку ниже:</div>
+        </div>
 
-        <p style="font-size:13px;font-weight:700;margin:14px 0 6px">💳 Способ 2: Тинькофф (перевод на карту)</p>
+        <a id="payTbankBtn" href="#" target="_self" class="btn-cta" style="display:block;text-align:center;background:linear-gradient(135deg,#FFDD2D,#FFB800);color:#0B0B0F;font-weight:700;padding:14px;border-radius:12px;text-decoration:none;margin-bottom:10px">💳 Открыть Т-Банк и оплатить ${amount} ₽</a>
+
+        <p style="font-size:13px;font-weight:700;margin:14px 0 6px">📋 Или переведи вручную:</p>
         <div style="background:#18181b;border:1px solid #FFDD2D;border-radius:10px;padding:10px;font-family:monospace;font-size:15px;color:#FFDD2D;text-align:center;margin-bottom:6px">${card}</div>
         <button class="btn-cta" style="width:100%;background:#26262E;color:#FFDD2D;font-weight:600;padding:10px;border-radius:10px;border:1px solid #FFDD2D;font-size:12px;cursor:pointer" onclick="try{navigator.clipboard.writeText('${card}').then(()=>toast('✅ Карта скопирована')).catch(()=>toast('Скопируй вручную: '+'${card}'));}catch(e){}">📋 Скопировать номер карты</button>
-        <p style="font-size:11px;color:#71717a;margin:6px 0 0;line-height:1.4">В комментарии к переводу укажи: <b>${comment}</b><br>Сумма: <b>${amount} ₽</b></p>
+        <p style="font-size:11px;color:#71717a;margin:6px 0 0;line-height:1.4;text-align:center">Сумма: <b>${amount} ₽</b><br>Комментарий: <b>${comment}</b></p>
 
-        <p style="font-size:13px;font-weight:700;margin:14px 0 6px">💎 Способ 3: TON</p>
-        <div style="background:#18181b;border:1px solid #0098EA;border-radius:10px;padding:10px;font-family:monospace;font-size:11px;color:#0098EA;text-align:center;word-break:break-all;margin-bottom:6px">${tonWallet}</div>
-        <button class="btn-cta" style="width:100%;background:#26262E;color:#0098EA;font-weight:600;padding:10px;border-radius:10px;border:1px solid #0098EA;font-size:12px;cursor:pointer" onclick="try{navigator.clipboard.writeText('${tonWallet}').then(()=>toast('✅ Кошелёк скопирован')).catch(()=>toast('Скопируй вручную'));}catch(e){}">📋 Скопировать кошелёк TON</button>
-        <p style="font-size:11px;color:#71717a;margin:6px 0 0;line-height:1.4">Сумма: <b>${tonAmt} TON</b><br>Комментарий: <b>${comment}</b></p>
-
-        <div style="margin-top:14px;background:rgba(34,197,94,.1);border:1px solid #22C55E;border-radius:10px;padding:10px;font-size:12px;color:#86efac;line-height:1.5;text-align:center">✅ Тариф активируется <b>автоматически</b> после оплаты.<br>Если не активировался за 5 мин — напиши <b>@Ibaraholka_bot</b></div>
+        <div style="margin-top:14px;background:rgba(34,197,94,.1);border:1px solid #22C55E;border-radius:10px;padding:10px;font-size:12px;color:#86efac;line-height:1.5;text-align:center">✅ После оплаты вернись сюда и нажми <b>«Я оплатил»</b>:<br><button id="confirmPaidBtn" class="btn-cta" style="width:100%;background:linear-gradient(135deg,#22C55E,#16A34A);color:#fff;font-weight:700;padding:12px;border-radius:10px;border:0;font-size:13px;cursor:pointer;margin-top:8px">✅ Я оплатил — активировать ${stars}★</button></div>
         <button class="btn-cta" style="width:100%;background:transparent;color:#a1a1aa;margin-top:10px;border:0;cursor:pointer;font-size:13px" onclick="closeModal()">Оплачу позже</button>
       </div></div>`;
       document.body.insertAdjacentHTML('beforeend',html);
+    // Заполняем href у Т-Банк кнопки из последнего yukassa response
+    if(window.__lastYukassaUrl){
+      const tBtn=document.getElementById('payTbankBtn');
+      if(tBtn){tBtn.href=window.__lastYukassaUrl;tBtn.setAttribute('target','_blank');tBtn.setAttribute('rel','noopener');tBtn.onclick=function(e){e.preventDefault();window.location.href=window.__lastYukassaUrl;return false;};}
+    }
+    // Назначаем обработчик "✅ Я оплатил"
+    const cBtn=document.getElementById('confirmPaidBtn');
+    if(cBtn){
+      cBtn.onclick=async()=>{
+        cBtn.disabled=true;cBtn.textContent='⏳ Проверяю оплату…';
+        try{
+          const nData=await fetch((window.API_BASE||'')+'/payments/tinkoff/notify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({listing_id:createdId,user_id:window.tg?.initDataUnsafe?.user?.id,tier:tier})}).then(r=>r.json()).catch(e=>({ok:false,error:String(e)}));
+          console.log('[pay] notify response',nData);
+          if(nData.ok){
+            cBtn.textContent='🎉 Активировать объявление!';
+            cBtn.style.background='linear-gradient(135deg,#FFB800,#FF8C00)';
+            cBtn.onclick=async()=>{
+              cBtn.disabled=true;cBtn.textContent='⏳ Публикую…';
+              try{
+                const aData=await fetch((window.API_BASE||'')+'/payments/activate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({listing_id:createdId,user_id:window.tg?.initDataUnsafe?.user?.id})}).then(r=>r.json()).catch(e=>({ok:false,error:String(e)}));
+                console.log('[pay] activate response',aData);
+                if(aData.ok){
+                  toast('🎉 Опубликовано в канале @ibaraholkatyt!');
+                  haptic('success');
+                  closeModal();
+                  await loadListings();
+                }else{
+                  cBtn.disabled=false;cBtn.textContent='🎉 Активировать объявление!';
+                  toast('❌ '+((aData.error||aData.detail||'Не удалось активировать').slice(0,100)));
+                }
+              }catch(e){cBtn.disabled=false;cBtn.textContent='🎉 Активировать объявление!';toast('❌ Ошибка сети');}
+            };
+          }else{
+            cBtn.disabled=false;cBtn.textContent='✅ Я оплатил — активировать '+stars+'★';
+            toast('⚠️ Оплата ещё не получена. Подожди 1 мин и попробуй ещё раз.');
+          }
+        }catch(e){cBtn.disabled=false;cBtn.textContent='✅ Я оплатил — активировать '+stars+'★';toast('❌ Ошибка сети');}
+      };
+    }
+    // Сохраняем URL в fallback на случай если кнопку нажмут
+    window.__lastYukassaUrl=payUrl||'';
     }
   };
 }
