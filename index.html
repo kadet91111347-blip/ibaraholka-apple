@@ -13,7 +13,7 @@
 // cleared by the URL itself (?v=…), not by saved-version mismatch.
 (function(){
   try{
-    var v='v56';
+    var v='v58';
     localStorage.setItem('__ib_version',v);
     var curParams=new URLSearchParams(location.search).get('v');
     if(!curParams||curParams!==v){
@@ -530,30 +530,8 @@ function openSellForm(showWarning){
     if(tier!=='free'){
       const stars=tier==='vip'?150:50;
       const amount=tier==='vip'?750:250;
-      try{
-        const tg=window.Telegram?.WebApp;
-        console.log('[pay] POST /payments/yukassa/create',{listing_id:createdId,tier,user_id:tg?.initDataUnsafe?.user?.id});
-        const yData=await fetch((window.API_BASE||'')+'/payments/yukassa/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({listing_id:createdId,tier:tier,user_id:tg?.initDataUnsafe?.user?.id})}).then(r=>r.json()).catch(e=>({ok:false,error:String(e)}));
-        console.log('[pay] yukassa response',yData);
-        if(yData.ok&&(yData.confirmation_url||yData.tinkoff_url||yData.quickpay_url)){
-          const payUrl=yData.confirmation_url||yData.tinkoff_url||yData.quickpay_url;
-          console.log('[pay] open Т-Банк via 3-tier fallback:',payUrl);
-          // Сохраняем URL для fallback кнопки в модалке
-          window.__lastPayUrl=payUrl;
-          // Попытка 1: tg.openLink() — открывает в Telegram in-app browser (самый надёжный в WebView)
-          try{if(tg?.openLink){tg.openLink(payUrl);console.log('[pay] OK: tg.openLink');return;}}catch(e){console.warn('[pay] tg.openLink failed',e);}
-          // Попытка 2: tg.openTelegramLink — для tg:// схем
-          try{if(tg?.openTelegramLink){tg.openTelegramLink(payUrl);console.log('[pay] OK: tg.openTelegramLink');return;}}catch(e){console.warn('[pay] tg.openTelegramLink failed',e);}
-          // Попытка 3: window.location.href — выгрузит из WebView в системный браузер
-          try{window.location.href=payUrl;console.log('[pay] OK: window.location.href');return;}catch(e){console.warn('[pay] location.href failed',e);}
-          // Попытка 4: window.open _blank — откроет в новой вкладке
-          try{window.open(payUrl,'_blank');console.log('[pay] OK: window.open');return;}catch(e){console.warn('[pay] window.open failed',e);}
-        }
-        // Если yukassa не сработала — показываем модалку с реквизитами
-        console.warn('[pay] yukassa fail, fallback to modal',yData);
-      }catch(e){
-        console.error('[pay] yukassa error',e);
-      }
+      // v58: yukassa удалён — 3 кнопки оплаты
+      // Fallback: модалка с реквизитами Тинькофф + TON (если redirect не сработал)
       // Fallback: модалка с реквизитами Тинькофф + TON (если redirect не сработал)
       const tg=window.Telegram?.WebApp;
       const botUrl='https://t.me/Ibaraholka_bot?start='+encodeURIComponent('pay_'+createdId+'_'+tier);
@@ -572,15 +550,15 @@ function openSellForm(showWarning){
           <div style="display:flex;justify-content:space-between;padding:4px 0"><span>Длительность</span><b style="color:#fff">${tier==='vip'?'7 дней':'24 часа'}</b></div>
         </div>
 
-        <a id="bigPayTbankBtn" href="javascript:void(0)" onclick="const u=window.__lastPayUrl||'${payUrl}';try{window.Telegram?.WebApp?.openLink?window.Telegram.WebApp.openLink(u):window.location.href=u;}catch(e){window.location.href=u;}" class="btn-cta" style="display:block;text-align:center;background:linear-gradient(135deg,#FFDD2D,#FFB800);color:#0B0B0F;font-weight:700;padding:16px;border-radius:12px;text-decoration:none;margin-bottom:12px;font-size:15px;box-shadow:0 4px 16px rgba(255,221,45,.4)">💳 Оплатить ${amount} ₽ через Т-Банк</a>
+        
 
-        <div style="background:rgba(255,221,45,.1);border:1px solid #FFDD2D;border-radius:12px;padding:14px;margin-bottom:14px;text-align:center">
-          <div style="font-size:24px;margin-bottom:6px">💳</div>
-          <div style="font-size:13px;font-weight:700;color:#FFDD2D;margin-bottom:6px">Открываем Т-Банк…</div>
-          <div style="font-size:12px;color:#a1a1aa;line-height:1.5">Если Т-Банк не открылся автоматически,<br>нажми кнопку ниже:</div>
-        </div>
+        <p style="font-size:12px;color:#a1a1aa;text-align:center;margin:0 0 12px;line-height:1.4">👇 Нажми на удобный способ. После оплаты вернись сюда ↓</p>
 
-        <a id="payTbankBtn" href="#" target="_self" class="btn-cta" style="display:block;text-align:center;background:linear-gradient(135deg,#FFDD2D,#FFB800);color:#0B0B0F;font-weight:700;padding:14px;border-radius:12px;text-decoration:none;margin-bottom:10px">💳 Открыть Т-Банк и оплатить ${amount} ₽</a>
+        <a id="payTbankBtn" href="https://www.tbank.ru/rm/r_TGugYbYVEb.mLmrPUwlTy/aHI4Y75190" target="_blank" rel="noopener" onclick="try{var __tg=window.Telegram&&window.Telegram.WebApp;if(__tg&&__tg.openLink){__tg.openLink(this.href);return false;}}catch(_e){}return true;" class="btn-cta" style="display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#FFDD2D,#FFB800);color:#0B0B0F;font-weight:700;padding:14px 16px;border-radius:12px;text-decoration:none;margin-bottom:8px"><span style="font-size:22px">💳</span><span style="flex:1;text-align:left;margin-left:12px">Т-Банк · ${amount} ₽</span><span style="font-size:18px">→</span></a>
+
+        <a id="payStarsBtn" href="https://t.me/Ibaraholka_bot?start=pay_${createdId}_${tier}" target="_blank" rel="noopener" onclick="try{var __sg=window.Telegram&&window.Telegram.WebApp;if(__sg&&__sg.openTelegramLink){__sg.openTelegramLink(this.href);return false;}}catch(_e){}return true;" class="btn-cta" style="display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#FFD75E,#FFB800);color:#0B0B0F;font-weight:700;padding:14px 16px;border-radius:12px;text-decoration:none;margin-bottom:8px"><span style="font-size:22px">⭐</span><span style="flex:1;text-align:left;margin-left:12px">Звёзды Telegram · ${stars} ★</span><span style="font-size:18px">→</span></a>
+
+        <button id="payTonBtn" type="button" class="btn-cta" style="display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#0098EA,#0078C8);color:#fff;font-weight:700;padding:14px 16px;border-radius:12px;border:0;margin-bottom:10px;font-size:14px;box-shadow:0 4px 16px rgba(0,152,234,.4);cursor:pointer;width:100%"><span style="font-size:22px">💎</span><span style="flex:1;text-align:left;margin-left:12px">TON · ${tier==='vip'?'0.75':'0.25'} TON</span><span style="font-size:18px">📋</span></button>
 
         <p style="font-size:13px;font-weight:700;margin:14px 0 6px">📋 Или переведи вручную:</p>
         <div style="background:#18181b;border:1px solid #FFDD2D;border-radius:10px;padding:10px;font-family:monospace;font-size:15px;color:#FFDD2D;text-align:center;margin-bottom:6px">${card}</div>
